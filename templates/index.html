@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
+    />
+    <title>{{ app_title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --sat: env(safe-area-inset-top, 0px);
+        --sab: env(safe-area-inset-bottom, 0px);
+        --sal: env(safe-area-inset-left, 0px);
+        --sar: env(safe-area-inset-right, 0px);
+      }
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        padding-top: var(--sat);
+        padding-left: var(--sal);
+        padding-right: var(--sar);
+      }
+      .pb-safe {
+        padding-bottom: calc(0.75rem + var(--sab));
+      }
+      .scroll-touch {
+        -webkit-overflow-scrolling: touch;
+      }
+    </style>
+  </head>
+  <body class="flex h-full flex-col bg-white text-gray-900 antialiased">
+    <header
+      class="z-30 flex-none border-b border-gray-200 bg-white shadow-sm"
+    >
+      <div class="mx-auto flex max-w-lg items-start justify-between gap-2 px-4 pb-2 pt-3">
+        <div class="min-w-0 flex-1">
+          <p class="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+            访谈进度
+          </p>
+          <h1
+            id="stepTitle"
+            class="truncate text-base font-semibold text-gray-900"
+          >
+            第一阶段：探索情绪出口
+          </h1>
+        </div>
+        <button
+          id="resetBtn"
+          type="button"
+          class="shrink-0 text-xs text-gray-400 underline decoration-gray-300"
+        >
+          重置
+        </button>
+      </div>
+      <div class="mx-auto max-w-lg px-4 pb-3">
+        <div class="flex items-center gap-1.5" id="stepSegments" aria-label="步骤 1 到 5"></div>
+        <p id="stepSub" class="mt-1.5 text-xs text-gray-500"></p>
+      </div>
+    </header>
+
+    <main
+      id="chatStream"
+      class="scroll-touch mx-auto flex w-full max-w-lg flex-1 flex-col gap-4 overflow-y-auto bg-gray-50 px-3 py-4"
+    ></main>
+
+    <div
+      id="lightbox"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/85 p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <button
+        id="lightboxClose"
+        type="button"
+        class="absolute right-4 top-[max(1rem,var(--sat))] rounded-full bg-white/15 px-4 py-2 text-sm text-white"
+      >
+        关闭
+      </button>
+      <img
+        id="lightboxImg"
+        alt="预览"
+        class="max-h-[88vh] max-w-full rounded-xl object-contain shadow-2xl"
+      />
+    </div>
+
+    <footer
+      class="z-30 flex-none border-t border-gray-200 bg-white pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.06)]"
+    >
+      <div class="mx-auto max-w-lg space-y-2 px-3 py-2">
+        <button
+          id="nextStageBtn"
+          type="button"
+          class="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-blue-500 bg-white py-3 text-sm font-bold text-blue-600 shadow-sm active:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:shadow-none"
+        >
+          <span id="nextStageLabel">进入下一阶段 (Next Stage)</span>
+        </button>
+        <div class="flex items-end gap-2">
+          <label class="sr-only" for="msgInput">输入回复</label>
+          <textarea
+            id="msgInput"
+            rows="1"
+            maxlength="2000"
+            placeholder="输入你的想法…"
+            class="max-h-36 min-h-[48px] flex-1 resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-[15px] leading-snug text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+          ></textarea>
+          <button
+            id="sendBtn"
+            type="button"
+            class="inline-flex h-12 min-w-[76px] shrink-0 items-center justify-center rounded-2xl bg-blue-500 px-4 text-sm font-semibold text-white shadow-md active:bg-blue-600 disabled:opacity-50"
+          >
+            发送
+          </button>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      const STEPS = [
+        null,
+        {
+          title: "第一阶段：探索情绪出口",
+          sub: "产品价值 · 只谈情绪与心理状态，不涉及灯或产品",
+        },
+        {
+          title: "第二阶段：语用学探寻",
+          sub: "语用学 · 光线质感与控制方式（按压、抚摸、感应等）",
+        },
+        {
+          title: "第三阶段：内在语义",
+          sub: "抽象意象 · 非灯具的景观 / 空间 / 材质",
+        },
+        {
+          title: "第四阶段：外在语义",
+          sub: "概念发光体 · 前卫、超现实的夜灯意象",
+        },
+        {
+          title: "第五阶段：语构学",
+          sub: "参数化几何 · 用语言微调形态与材质",
+        },
+      ];
+
+      const chatStream = document.getElementById("chatStream");
+      const msgInput = document.getElementById("msgInput");
+      const sendBtn = document.getElementById("sendBtn");
+      const nextStageBtn = document.getElementById("nextStageBtn");
+      const nextStageLabel = document.getElementById("nextStageLabel");
+      const resetBtn = document.getElementById("resetBtn");
+      const stepTitle = document.getElementById("stepTitle");
+      const stepSub = document.getElementById("stepSub");
+      const stepSegments = document.getElementById("stepSegments");
+      const lightbox = document.getElementById("lightbox");
+      const lightboxImg = document.getElementById("lightboxImg");
+      const lightboxClose = document.getElementById("lightboxClose");
+
+      /** 与后端同步的当前阶段（1–5） */
+      let currentStep = 1;
+      let isSending = false;
+      let isAdvancing = false;
+      let interviewFinished = false;
+
+      function el(tag, cls, text) {
+        const n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text != null) n.textContent = text;
+        return n;
+      }
+
+      function updateNextStageButton() {
+        if (interviewFinished) {
+          nextStageBtn.disabled = true;
+          nextStageLabel.textContent = "访谈已结束";
+          return;
+        }
+        if (currentStep >= 5) {
+          nextStageBtn.disabled = false;
+          nextStageLabel.textContent = "结束访谈";
+        } else {
+          nextStageBtn.disabled = false;
+          nextStageLabel.textContent = "进入下一阶段 (Next Stage)";
+        }
+      }
+
+      function renderStepHeader(step) {
+        const s = STEPS[step] || STEPS[1];
+        stepTitle.textContent = s.title;
+        stepSub.textContent = interviewFinished ? s.sub + " · 已结束" : s.sub;
+
+        stepSegments.innerHTML = "";
+        for (let i = 1; i <= 5; i++) {
+          const seg = el("div", "h-2 flex-1 rounded-full transition-all duration-200");
+          if (i < step) {
+            seg.classList.add("bg-blue-500");
+          } else if (i === step) {
+            seg.classList.add("bg-blue-500", "ring-2", "ring-blue-200", "ring-offset-1");
+          } else {
+            seg.classList.add("bg-gray-200");
+          }
+          stepSegments.appendChild(seg);
+        }
+        updateNextStageButton();
+      }
+
+      function appendSystemMessage(text) {
+        const row = el("div", "flex w-full justify-center py-2");
+        const inner = el(
+          "div",
+          "max-w-[92%] rounded-lg border border-gray-200 bg-white px-4 py-2 text-center text-xs font-medium leading-relaxed text-gray-600 shadow-sm"
+        );
+        inner.style.whiteSpace = "pre-wrap";
+        inner.textContent = text || "";
+        row.appendChild(inner);
+        chatStream.appendChild(row);
+      }
+
+      function appendUserMessage(text) {
+        const row = el("div", "flex w-full justify-end");
+        const bubble = el(
+          "div",
+          "max-w-[85%] rounded-2xl rounded-br-md bg-blue-500 px-4 py-2.5 text-[15px] leading-relaxed text-white shadow-sm"
+        );
+        bubble.textContent = text;
+        row.appendChild(bubble);
+        chatStream.appendChild(row);
+      }
+
+      function appendAssistantTextOnly(text) {
+        const block = el("div", "flex w-full justify-start");
+        const inner = el("div", "max-w-[90%]");
+        const label = el("div", "mb-1 pl-1 text-[11px] text-gray-400", "主持人");
+        const bubble = el(
+          "div",
+          "rounded-2xl rounded-bl-md bg-white px-4 py-2.5 text-[15px] leading-relaxed text-gray-800 shadow-sm"
+        );
+        bubble.style.whiteSpace = "pre-wrap";
+        bubble.textContent = text || "";
+        inner.appendChild(label);
+        inner.appendChild(bubble);
+        block.appendChild(inner);
+        chatStream.appendChild(block);
+      }
+
+      function appendAssistantImageCard(m) {
+        const block = el("div", "flex w-full justify-start");
+        const inner = el("div", "w-full max-w-[92%] sm:max-w-[90%]");
+        const label = el("div", "mb-1 pl-1 text-[11px] text-gray-400", "主持人");
+
+        const card = el(
+          "div",
+          "overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-gray-100"
+        );
+
+        if (m.image_intro) {
+          const top = el(
+            "div",
+            "border-b border-gray-100 px-4 py-3 text-[15px] leading-relaxed text-gray-600"
+          );
+          top.style.whiteSpace = "pre-wrap";
+          top.textContent = m.image_intro;
+          card.appendChild(top);
+        }
+
+        const imgWrap = el("div", "relative w-full cursor-pointer bg-gray-100");
+        const img = document.createElement("img");
+        img.src = m.image_url;
+        img.alt = "AI 生成示意图";
+        img.loading = "lazy";
+        img.className = "block w-full object-cover";
+        img.style.maxHeight = "320px";
+        img.addEventListener("click", () => openLightbox(m.image_url));
+        imgWrap.appendChild(img);
+
+        const tapHint = el(
+          "div",
+          "pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/45 px-2 py-0.5 text-[10px] text-white",
+          "点击放大"
+        );
+        imgWrap.appendChild(tapHint);
+        card.appendChild(imgWrap);
+
+        const bottom = el(
+          "div",
+          "px-4 py-3 text-[15px] leading-relaxed text-gray-800"
+        );
+        bottom.style.whiteSpace = "pre-wrap";
+        bottom.textContent = m.content || "请结合画面说说你的感受。";
+
+        const cap = el(
+          "div",
+          "border-t border-gray-100 bg-gray-50/80 px-4 py-2 text-xs leading-snug text-gray-500",
+          "以上为 AI 根据本阶段任务生成的视觉刺激与解读，你可自由同意或反驳。"
+        );
+
+        card.appendChild(bottom);
+        card.appendChild(cap);
+
+        inner.appendChild(label);
+        inner.appendChild(card);
+        block.appendChild(inner);
+        chatStream.appendChild(block);
+      }
+
+      function appendMessage(m) {
+        if (m.role === "system") {
+          appendSystemMessage(m.content || "");
+          return;
+        }
+        if (m.role === "user") {
+          appendUserMessage(m.content || "");
+          return;
+        }
+        if (m.image_url) {
+          appendAssistantImageCard(m);
+        } else {
+          appendAssistantTextOnly(m.content || "");
+        }
+      }
+
+      function applyStateFromServer(data) {
+        currentStep = data.step || 1;
+        interviewFinished = !!data.finished;
+        renderStepHeader(currentStep);
+        chatStream.innerHTML = "";
+        (data.messages || []).forEach(appendMessage);
+        msgInput.disabled = interviewFinished;
+        sendBtn.disabled = interviewFinished;
+        requestAnimationFrame(() => {
+          chatStream.scrollTop = chatStream.scrollHeight;
+        });
+      }
+
+      async function api(path, options = {}) {
+        const res = await fetch(path, {
+          credentials: "include",
+          headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+          ...options,
+        });
+        const text = await res.text();
+        let json;
+        try {
+          json = text ? JSON.parse(text) : {};
+        } catch {
+          throw new Error(text || "响应解析失败");
+        }
+        if (!res.ok) {
+          const detail = json.detail || json.message || res.statusText;
+          throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+        }
+        return json;
+      }
+
+      async function bootstrap() {
+        const data = await api("/api/state");
+        applyStateFromServer(data);
+      }
+
+      async function sendMessage() {
+        const t = msgInput.value.trim();
+        if (!t || isSending || interviewFinished) return;
+        isSending = true;
+        sendBtn.disabled = true;
+        sendBtn.textContent = "…";
+        try {
+          const data = await api("/api/chat", {
+            method: "POST",
+            body: JSON.stringify({ message: t, step: currentStep }),
+          });
+          msgInput.value = "";
+          msgInput.style.height = "auto";
+          applyStateFromServer(data);
+        } catch (e) {
+          alert(e.message || String(e));
+        } finally {
+          isSending = false;
+          sendBtn.disabled = interviewFinished;
+          sendBtn.textContent = "发送";
+          msgInput.focus();
+        }
+      }
+
+      /**
+       * 进入下一阶段：currentStep +1，立即刷新顶部进度；再请求后端写入 system 分割线并同步消息。
+       * 第 5 阶段时按钮为「结束访谈」，不增加 step。
+       */
+      async function onNextStageClick() {
+        if (interviewFinished || isAdvancing) return;
+
+        if (currentStep >= 5) {
+          isAdvancing = true;
+          nextStageBtn.disabled = true;
+          try {
+            const data = await api("/api/finish-interview", {
+              method: "POST",
+              body: "{}",
+            });
+            applyStateFromServer(data);
+          } catch (e) {
+            alert(e.message || String(e));
+          } finally {
+            isAdvancing = false;
+            updateNextStageButton();
+          }
+          return;
+        }
+
+        const prevStep = currentStep;
+        const nextStep = Math.min(5, currentStep + 1);
+        currentStep = nextStep;
+        renderStepHeader(currentStep);
+
+        isAdvancing = true;
+        nextStageBtn.disabled = true;
+        try {
+          const data = await api("/api/advance-stage", {
+            method: "POST",
+            body: JSON.stringify({ step: currentStep }),
+          });
+          applyStateFromServer(data);
+        } catch (e) {
+          currentStep = prevStep;
+          renderStepHeader(currentStep);
+          alert(e.message || String(e));
+          try {
+            applyStateFromServer(await api("/api/state"));
+          } catch (_) {}
+        } finally {
+          isAdvancing = false;
+          updateNextStageButton();
+        }
+      }
+
+      async function resetSession() {
+        if (!confirm("确定重置？当前进度将清空。")) return;
+        const data = await api("/api/reset", { method: "POST", body: "{}" });
+        applyStateFromServer(data);
+      }
+
+      function openLightbox(url) {
+        lightboxImg.src = url;
+        lightbox.classList.remove("hidden");
+        lightbox.classList.add("flex");
+      }
+
+      function closeLightbox() {
+        lightbox.classList.add("hidden");
+        lightbox.classList.remove("flex");
+        lightboxImg.removeAttribute("src");
+      }
+
+      sendBtn.addEventListener("click", sendMessage);
+      nextStageBtn.addEventListener("click", onNextStageClick);
+      resetBtn.addEventListener("click", resetSession);
+      lightboxClose.addEventListener("click", closeLightbox);
+      lightbox.addEventListener("click", (ev) => {
+        if (ev.target === lightbox) closeLightbox();
+      });
+
+      msgInput.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" && !ev.shiftKey) {
+          ev.preventDefault();
+          sendMessage();
+        }
+      });
+
+      msgInput.addEventListener("input", () => {
+        msgInput.style.height = "auto";
+        msgInput.style.height = Math.min(msgInput.scrollHeight, 144) + "px";
+      });
+
+      bootstrap().catch((e) => alert(e.message || String(e)));
+    </script>
+  </body>
+</html>
