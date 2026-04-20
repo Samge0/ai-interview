@@ -40,6 +40,9 @@ _raw_base = (os.getenv("OPENAI_BASE_URL") or "https://api.newcoin.tech").strip()
 LLM_BASE_URL = _raw_base
 LLM_MODEL = (os.getenv("OPENAI_MODEL") or "doubao-seed-2-0-pro-260215").strip()
 
+# 访问口令（可选）：设置后用户需要输入正确的口令才能开始访谈
+ACCESS_CODE = (os.getenv("ACCESS_CODE") or "").strip()
+
 
 def chat_completions_url() -> str:
     """拼接 /v1/chat/completions（兼容只填主机根域名或已带 /v1 的写法）。"""
@@ -922,10 +925,16 @@ async def api_finish_interview(request: Request):
 
 @app.post("/api/set-username")
 async def api_set_username(request: Request, payload: dict[str, Any]):
-    """设置用户名"""
+    """设置用户名（可选访问口令验证）"""
     username = (payload.get("username") or "").strip()
     if not username:
         raise HTTPException(status_code=400, detail="用户名不能为空")
+
+    # 验证访问口令（如果配置了）
+    if ACCESS_CODE:
+        access_code = (payload.get("access_code") or "").strip()
+        if access_code != ACCESS_CODE:
+            raise HTTPException(status_code=403, detail="访问口令错误，请检查后重试")
 
     sid, state = get_or_create_session(session_id_from_request(request))
     state.username = username
