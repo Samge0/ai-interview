@@ -55,3 +55,7 @@ Thumbs.db
 *.tmp
 *.temp
 ~$*
+
+# custom
+.claude/
+.vscode/

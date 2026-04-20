@@ -45,3 +45,7 @@ docs/
 
 # CI/CD
 .github/
+
+# custom
+.claude/
+.vscode/
