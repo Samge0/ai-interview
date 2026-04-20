@@ -81,7 +81,7 @@
             id="stepTitle"
             class="truncate text-base font-semibold text-gray-900"
           >
-            第一阶段：探索情绪出口
+            第一阶段：产品价值 (Value)
           </h1>
         </div>
         <button
@@ -269,27 +269,47 @@
         }
       }
 
+      const SESSION_STORAGE_KEY = "ai_interview_session_id";
+
+      function syncSessionIdFromPayload(data) {
+        if (!data || typeof data.session_id !== "string") return;
+        const s = data.session_id.trim();
+        if (!s) return;
+        try {
+          sessionStorage.setItem(SESSION_STORAGE_KEY, s);
+        } catch (_) {}
+      }
+
+      function sessionIdHeaders() {
+        try {
+          const s = (sessionStorage.getItem(SESSION_STORAGE_KEY) || "").trim();
+          return s ? { "X-Session-Id": s } : {};
+        } catch (_) {
+          return {};
+        }
+      }
+
       const STEPS = [
         null,
         {
-          title: "第一阶段：探索情绪出口",
-          sub: "产品价值 · 只谈情绪与心理状态，不涉及灯或产品",
+          title: "第一阶段：产品价值 (Value)",
+          sub: "心理隐喻 · 约 5 分钟 · 纯文本 · 不提夜灯/造型",
         },
         {
-          title: "第二阶段：语用学探寻",
-          sub: "语用学 · 光线质感与控制方式（按压、抚摸、感应等）",
+          title: "第二阶段：语用学 (Function)",
+          sub: "物理与行为映射 · 约 5 分钟 · 纯文本 · 桌面光影与交互",
         },
         {
-          title: "第三阶段：内在语义",
-          sub: "抽象意象 · 非灯具的景观 / 空间 / 材质",
+          title: "第三阶段：内在语义 (Internal Semantics)",
+          sub: "抽象意象映射 · 约 6 分钟 · 文本 + AIGC 纯意象图",
         },
         {
-          title: "第四阶段：外在语义",
-          sub: "概念发光体 · 前卫、超现实的夜灯意象",
+          title: "第四阶段：外在语义 (External Semantics)",
+          sub: "虚拟概念生成 · 约 7 分钟 · 文本 + 超现实桌面发光体",
         },
         {
-          title: "第五阶段：语构学",
-          sub: "参数化几何 · 用语言微调形态与材质",
+          title: "第五阶段：语构学 (Syntactics)",
+          sub: "参数化形态演化 · 约 7 分钟 · 文本 + 微调图 · 对齐真实夜灯比对",
         },
       ];
 
@@ -328,7 +348,7 @@
           {
             role: "assistant",
             content:
-              "你好，我是今天的主持人。接下来没有标准答案，你可以慢慢想、慢慢说。\n\n在结束一天疲惫的课程回到宿舍后，你最渴望获得哪种情绪体验或心理状态？",
+              "你好，我是今天的主持人。开始前想再次确认：你已完成 BFI 与 CVPA 量表；本次访谈没有标准答案，我们会一起谈你的情绪与偏好，过程中我可能会根据你的描述生成一些画面。请尽量放松，跟随直觉回答。\n\n回想一下，当你结束了一整天密集的课程或实验，推开宿舍门，坐到自己书桌前的那一刻。你最希望在这个属于你的小空间里，获得一种什么样的情绪体验？",
           },
         ],
       };
@@ -554,9 +574,8 @@
         NEXT_STAGE_ROW +
         " cursor-not-allowed border border-gray-200 bg-gray-100 font-medium text-gray-400 opacity-95";
 
-      function minUserTurnsToAdvance(step) {
-        if (step >= 5) return 1;
-        return step === 1 ? 2 : 1;
+      function minUserTurnsToAdvance() {
+        return 2;
       }
 
       function updateNextStageButton() {
@@ -569,29 +588,27 @@
         }
         if (currentStep >= 5) {
           nextStageLabel.textContent = "结束访谈";
-          const need = minUserTurnsToAdvance(5);
+          const need = minUserTurnsToAdvance();
           const canAct = userTurnsInStep >= need && !isAdvancing;
           const locked = !canAct || isAdvancing;
           nextStageBtn.disabled = locked;
           nextStageBtn.className = locked ? NEXT_STAGE_LOCKED : NEXT_STAGE_READY;
           if (locked && !isAdvancing) {
-            nextStageBtn.title = "请在本阶段至少发送 1 条回复后再结束访谈。";
+            nextStageBtn.title = "第五阶段：请至少发送 2 条回复后再结束访谈。";
           } else {
             nextStageBtn.removeAttribute("title");
           }
           return;
         }
         nextStageLabel.textContent = "进入下一阶段 (Next Stage)";
-        const need = minUserTurnsToAdvance(currentStep);
+        const need = minUserTurnsToAdvance();
         const canAct = userTurnsInStep >= need && !isAdvancing;
         const locked = !canAct || isAdvancing;
         nextStageBtn.disabled = locked;
         nextStageBtn.className = locked ? NEXT_STAGE_LOCKED : NEXT_STAGE_READY;
         if (locked && !isAdvancing) {
           nextStageBtn.title =
-            currentStep === 1
-              ? "第一阶段：请至少发送 2 条消息（例如先答开场问题，再答主持追问）后再进入下一阶段。"
-              : "请在本阶段至少发送 1 条消息后再进入下一阶段。";
+            "本阶段请至少发送 2 条消息（与主持完成两轮文字互动）后再进入下一阶段。";
         } else {
           nextStageBtn.removeAttribute("title");
         }
@@ -659,13 +676,19 @@
 
       function appendUserMessage(text) {
         const row = el("div", "flex w-full justify-end");
+        const wrap = el("div", "max-w-[85%]");
+        const label = el("div", "mb-1 pr-1 text-right text-[11px] text-gray-400", "你");
         const bubble = el(
           "div",
-          "max-w-[85%] rounded-2xl rounded-br-md bg-blue-500 px-4 py-2.5 text-[15px] leading-relaxed text-white shadow-sm"
+          "rounded-2xl rounded-br-md bg-blue-500 px-4 py-2.5 text-[15px] leading-relaxed text-white shadow-sm"
         );
+        bubble.style.whiteSpace = "pre-wrap";
         bubble.textContent = text;
-        row.appendChild(bubble);
+        wrap.appendChild(label);
+        wrap.appendChild(bubble);
+        row.appendChild(wrap);
         chatStream.appendChild(row);
+        return row;
       }
 
       function appendAssistantTextOnly(text) {
@@ -761,6 +784,7 @@
       }
 
       function applyStateFromServer(data) {
+        syncSessionIdFromPayload(data);
         currentStep = data.step || 1;
         userTurnsInStep = Number(data.user_turns_in_step) || 0;
         interviewFinished = !!data.finished;
@@ -786,11 +810,15 @@
         const url = apiUrl(path);
         let res;
         try {
+          const hdrs = { ...sessionIdHeaders(), ...(options.headers || {}) };
+          if (options.body != null && !hdrs["Content-Type"]) {
+            hdrs["Content-Type"] = "application/json";
+          }
           res = await fetch(url, {
             method: options.method || "GET",
             credentials: apiCredentialsMode(),
             cache: "no-store",
-            headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+            headers: hdrs,
             body: options.body,
           });
         } catch (err) {
@@ -816,6 +844,7 @@
           const detail = json.detail || json.message || res.statusText;
           throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
         }
+        syncSessionIdFromPayload(json);
         return json;
       }
 
@@ -857,6 +886,11 @@
         sendBtn.disabled = true;
         sendBtn.textContent = "…";
         showSendFlowTip("正在发送，请稍候…（主持回复可能需要十几秒）", "wait", 0);
+        const pendingUserRow = appendUserMessage(t);
+        if (pendingUserRow) pendingUserRow.dataset.pendingUser = "1";
+        requestAnimationFrame(() => {
+          chatStream.scrollTop = chatStream.scrollHeight;
+        });
         try {
           const data = await api("/api/chat", {
             method: "POST",
@@ -871,6 +905,7 @@
           applyStateFromServer(data);
           showSendFlowTip("已发送，主持已回复。", "ok", 3200);
         } catch (e) {
+          if (pendingUserRow && pendingUserRow.parentNode) pendingUserRow.remove();
           hideSendFlowTip();
           alert(e.message || String(e));
         } finally {
@@ -912,13 +947,9 @@
           return;
         }
 
-        const need = minUserTurnsToAdvance(currentStep);
+        const need = minUserTurnsToAdvance();
         if (userTurnsInStep < need) {
-          alert(
-            currentStep === 1
-              ? "第一阶段需至少发送 2 条消息后再进入下一阶段。"
-              : "请在本阶段至少发送 1 条消息后再进入下一阶段。"
-          );
+          alert("本阶段需至少发送 2 条消息并与主持完成互动后，再进入下一阶段。");
           return;
         }
 
@@ -953,6 +984,9 @@
       async function resetSession() {
         if (!confirm("确定重置？当前进度将清空。")) return;
         if (offlineMode) {
+          try {
+            sessionStorage.removeItem(SESSION_STORAGE_KEY);
+          } catch (_) {}
           applyStateFromServer(FALLBACK_STATE);
           currentStep = 1;
           renderStepHeader(1);
