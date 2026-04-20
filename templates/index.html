@@ -7,6 +7,21 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
     />
     <title>{{ app_title }}</title>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search || "");
+        var fromQuery = (params.get("api") || "").trim().replace(/\/$/, "");
+        if (fromQuery && /^https?:\/\//i.test(fromQuery)) {
+          window.__API_ORIGIN__ = fromQuery;
+          return;
+        }
+        if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+          window.__API_ORIGIN__ = window.location.origin;
+          return;
+        }
+        window.__API_ORIGIN__ = "http://127.0.0.1:8000";
+      })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       :root {
@@ -30,6 +45,23 @@
       }
       .scroll-touch {
         -webkit-overflow-scrolling: touch;
+      }
+      @keyframes mic-pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+        }
+        70% {
+          box-shadow: 0 0 0 14px rgba(239, 68, 68, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+        }
+      }
+      .mic-listening {
+        background-color: rgb(239 68 68) !important;
+        color: white !important;
+        border-color: rgb(220 38 38) !important;
+        animation: mic-pulse 1.4s ease-out infinite;
       }
     </style>
   </head>
@@ -62,6 +94,12 @@
         <p id="stepSub" class="mt-1.5 text-xs text-gray-500"></p>
       </div>
     </header>
+
+    <div
+      id="connBanner"
+      class="mx-auto hidden w-full max-w-lg border-b border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs text-amber-950"
+      role="alert"
+    ></div>
 
     <main
       id="chatStream"
@@ -105,9 +143,32 @@
             id="msgInput"
             rows="1"
             maxlength="2000"
-            placeholder="输入你的想法…"
-            class="max-h-36 min-h-[48px] flex-1 resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-[15px] leading-snug text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+            placeholder="输入或语音…"
+            class="max-h-36 min-h-[48px] min-w-0 flex-1 resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-[15px] leading-snug text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
           ></textarea>
+          <button
+            id="micBtn"
+            type="button"
+            aria-label="语音输入"
+            aria-pressed="false"
+            title="点击开始说话，再次点击结束识别"
+            class="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-600 shadow-sm transition-colors active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="h-6 w-6"
+              aria-hidden="true"
+            >
+              <path
+                d="M8.25 4.5a3.75 3.75 0 0 1 7.5 0v8.25a3.75 3.75 0 1 1-7.5 0V4.5Z"
+              />
+              <path
+                d="M6 10.5a.75.75 0 0 1 .75.75v1.5a5.25 5.25 0 1 0 10.5 0v-1.5a.75.75 0 0 1 1.5 0v1.5a6.751 6.751 0 0 1-6 6.709V21h3a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1 0-1.5H9.75v-2.291a6.751 6.751 0 0 1-6-6.709v-1.5A.75.75 0 0 1 6 10.5Z"
+              />
+            </svg>
+          </button>
           <button
             id="sendBtn"
             type="button"
@@ -116,10 +177,41 @@
             发送
           </button>
         </div>
+        <p id="voiceStatus" class="hidden text-center text-[11px] text-red-500"></p>
       </div>
     </footer>
 
     <script>
+      function apiOriginBase() {
+        let o =
+          typeof window.__API_ORIGIN__ === "string"
+            ? String(window.__API_ORIGIN__).trim().replace(/\/$/, "")
+            : "";
+        if (!o || o.indexOf("{" + "{") !== -1) {
+          if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+            o = window.location.origin.replace(/\/$/, "");
+          } else {
+            o = "http://127.0.0.1:8000";
+          }
+          window.__API_ORIGIN__ = o;
+        }
+        return o;
+      }
+      function apiUrl(path) {
+        const base = apiOriginBase();
+        const p = path.startsWith("/") ? path : "/" + path;
+        return base ? base + p : p;
+      }
+      function apiCredentialsMode() {
+        const base = apiOriginBase();
+        if (!base) return "include";
+        try {
+          return new URL(base).origin === window.location.origin ? "include" : "omit";
+        } catch {
+          return "omit";
+        }
+      }
+
       const STEPS = [
         null,
         {
@@ -156,12 +248,197 @@
       const lightbox = document.getElementById("lightbox");
       const lightboxImg = document.getElementById("lightboxImg");
       const lightboxClose = document.getElementById("lightboxClose");
+      const micBtn = document.getElementById("micBtn");
+      const voiceStatus = document.getElementById("voiceStatus");
 
       /** 与后端同步的当前阶段（1–5） */
       let currentStep = 1;
       let isSending = false;
       let isAdvancing = false;
       let interviewFinished = false;
+      /** 为 true 时表示未拉到 /api/state，仅展示本地占位文案，发送不会成功 */
+      let offlineMode = false;
+
+      const FALLBACK_STATE = {
+        step: 1,
+        max_step: 5,
+        user_turns_in_step: 0,
+        finished: false,
+        messages: [
+          {
+            role: "assistant",
+            content:
+              "你好，我是今天的主持人。接下来没有标准答案，你可以慢慢想、慢慢说。\n\n在结束一天疲惫的课程回到宿舍后，你最渴望获得哪种情绪体验或心理状态？",
+          },
+        ],
+      };
+
+      function setConnBanner(show, text) {
+        const el = document.getElementById("connBanner");
+        if (!el) return;
+        if (!show) {
+          el.classList.add("hidden");
+          el.innerHTML = "";
+          return;
+        }
+        el.classList.remove("hidden");
+        el.innerHTML = "";
+        const p = document.createElement("p");
+        p.className = "mb-2 leading-relaxed";
+        p.textContent = text;
+        el.appendChild(p);
+        const row = document.createElement("div");
+        row.className = "flex flex-wrap items-center justify-center gap-2";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className =
+          "rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white active:bg-amber-700";
+        btn.textContent = "重试连接";
+        btn.addEventListener("click", () => bootstrap());
+        row.appendChild(btn);
+        const healthBtn = document.createElement("button");
+        healthBtn.type = "button";
+        healthBtn.className =
+          "rounded-lg border border-amber-700 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 active:bg-amber-100";
+        healthBtn.textContent = "服务自检 /api/health";
+        healthBtn.addEventListener("click", () => {
+          window.open(apiUrl("/api/health"), "_blank", "noopener,noreferrer");
+        });
+        row.appendChild(healthBtn);
+        const llmBtn = document.createElement("button");
+        llmBtn.type = "button";
+        llmBtn.className =
+          "rounded-lg border border-amber-700 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 active:bg-amber-100";
+        llmBtn.textContent = "上游 LLM /api/health/llm";
+        llmBtn.addEventListener("click", () => {
+          window.open(apiUrl("/api/health/llm"), "_blank", "noopener,noreferrer");
+        });
+        row.appendChild(llmBtn);
+        el.appendChild(row);
+      }
+
+      const SpeechRecognitionImpl =
+        typeof window !== "undefined"
+          ? window.SpeechRecognition || window.webkitSpeechRecognition
+          : null;
+      const speechRecognitionSupported = !!SpeechRecognitionImpl;
+
+      let speechRecognition = null;
+      let speechSessionFinal = "";
+      let speechVoicePrefix = "";
+
+      function setMicListeningUI(on) {
+        micBtn.setAttribute("aria-pressed", on ? "true" : "false");
+        micBtn.classList.toggle("mic-listening", !!on);
+      }
+
+      function showVoiceHint(msg) {
+        if (!msg) {
+          voiceStatus.classList.add("hidden");
+          voiceStatus.textContent = "";
+          return;
+        }
+        voiceStatus.textContent = msg;
+        voiceStatus.classList.remove("hidden");
+        clearTimeout(showVoiceHint._t);
+        showVoiceHint._t = setTimeout(() => {
+          voiceStatus.classList.add("hidden");
+        }, 4500);
+      }
+
+      function ensureSpeechRecognition() {
+        if (!SpeechRecognitionImpl) return null;
+        if (speechRecognition) return speechRecognition;
+        const r = new SpeechRecognitionImpl();
+        r.lang = "zh-CN";
+        r.interimResults = true;
+        r.continuous = true;
+        r.maxAlternatives = 1;
+
+        r.onstart = () => {
+          setMicListeningUI(true);
+          speechSessionFinal = "";
+          speechVoicePrefix = msgInput.value;
+          showVoiceHint("");
+        };
+
+        r.onresult = (event) => {
+          let interim = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const piece = event.results[i][0].transcript;
+            if (event.results[i].isFinal) speechSessionFinal += piece;
+            else interim += piece;
+          }
+          msgInput.value = speechVoicePrefix + speechSessionFinal + interim;
+          msgInput.dispatchEvent(new Event("input", { bubbles: true }));
+        };
+
+        r.onerror = (event) => {
+          if (event.error === "aborted") return;
+          if (event.error === "no-speech") {
+            showVoiceHint("未检测到语音，可再试一次或靠近麦克风说话。");
+            return;
+          }
+          const tips = {
+            "not-allowed":
+              "无法使用麦克风：你拒绝了权限，或浏览器禁止了访问。请在地址栏旁重新允许麦克风后刷新页面。",
+            "service-not-allowed": "语音识别服务不可用，请换用 Chrome / Edge 或检查系统权限。",
+            network: "网络异常，语音识别失败，请稍后重试。",
+            "audio-capture": "未检测到可用的麦克风设备。",
+          };
+          const msg = tips[event.error] || `语音识别出错：${event.error}`;
+          alert(msg);
+          showVoiceHint(msg);
+        };
+
+        r.onend = () => {
+          setMicListeningUI(false);
+        };
+
+        speechRecognition = r;
+        return speechRecognition;
+      }
+
+      function toggleSpeechRecognition() {
+        if (!speechRecognitionSupported) {
+          alert(
+            "当前浏览器不支持语音输入。请使用桌面端 Chrome / Edge（或新版 Safari），并尽量通过 https 或 localhost 访问。"
+          );
+          return;
+        }
+        if (interviewFinished || msgInput.disabled) return;
+
+        const rec = ensureSpeechRecognition();
+        if (!rec) return;
+
+        if (micBtn.classList.contains("mic-listening")) {
+          rec.stop();
+          return;
+        }
+
+        try {
+          rec.start();
+        } catch (e) {
+          if (e && e.name === "InvalidStateError") {
+            try {
+              rec.stop();
+            } catch (_) {}
+            setTimeout(() => {
+              try {
+                rec.start();
+              } catch (e2) {
+                alert("语音识别忙线中，请稍后再试。\n" + (e2 && e2.message ? e2.message : ""));
+              }
+            }, 150);
+          } else {
+            alert("无法启动语音识别：\n" + (e && e.message ? e.message : String(e)));
+          }
+        }
+      }
+
+      micBtn.addEventListener("click", () => {
+        toggleSpeechRecognition();
+      });
 
       function el(tag, cls, text) {
         const n = document.createElement(tag);
@@ -323,22 +600,47 @@
       function applyStateFromServer(data) {
         currentStep = data.step || 1;
         interviewFinished = !!data.finished;
+        if (interviewFinished && speechRecognition && micBtn.classList.contains("mic-listening")) {
+          try {
+            speechRecognition.stop();
+          } catch (_) {}
+        }
         renderStepHeader(currentStep);
         chatStream.innerHTML = "";
         (data.messages || []).forEach(appendMessage);
         msgInput.disabled = interviewFinished;
         sendBtn.disabled = interviewFinished;
+        micBtn.disabled = interviewFinished;
+        micBtn.classList.toggle("opacity-40", !speechRecognitionSupported);
+        micBtn.classList.toggle("grayscale", !speechRecognitionSupported);
         requestAnimationFrame(() => {
           chatStream.scrollTop = chatStream.scrollHeight;
         });
       }
 
       async function api(path, options = {}) {
-        const res = await fetch(path, {
-          credentials: "include",
-          headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-          ...options,
-        });
+        const url = apiUrl(path);
+        let res;
+        try {
+          res = await fetch(url, {
+            method: options.method || "GET",
+            credentials: apiCredentialsMode(),
+            cache: "no-store",
+            headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+            body: options.body,
+          });
+        } catch (err) {
+          const base = apiOriginBase();
+          const tip =
+            (err && err.message) ||
+            "Failed to fetch（常见原因：未启动 uvicorn、端口与地址栏不一致、或用「文件」方式打开了网页）。";
+          throw new Error(
+            tip +
+              (base
+                ? ` 当前 API：${base}`
+                : " 请通过 FastAPI 打开的页面访问（例如 http://127.0.0.1:8000/）。")
+          );
+        }
         const text = await res.text();
         let json;
         try {
@@ -354,13 +656,31 @@
       }
 
       async function bootstrap() {
-        const data = await api("/api/state");
-        applyStateFromServer(data);
+        offlineMode = false;
+        setConnBanner(false, "");
+        try {
+          const data = await api("/api/state");
+          offlineMode = false;
+          applyStateFromServer(data);
+        } catch (e) {
+          console.error(e);
+          offlineMode = true;
+          setConnBanner(
+            true,
+            (e && e.message) ||
+              "无法连接后端。请先在项目目录执行：python -m uvicorn main:app --host 127.0.0.1 --port 8000 ，再在浏览器打开同一地址（不要双击磁盘上的 index.html）。"
+          );
+          applyStateFromServer(FALLBACK_STATE);
+        }
       }
 
       async function sendMessage() {
         const t = msgInput.value.trim();
         if (!t || isSending || interviewFinished) return;
+        if (offlineMode) {
+          alert("当前未连接到后端，无法发送。请先启动 uvicorn 并点击上方「重试连接」。");
+          return;
+        }
         isSending = true;
         sendBtn.disabled = true;
         sendBtn.textContent = "…";
@@ -371,6 +691,8 @@
           });
           msgInput.value = "";
           msgInput.style.height = "auto";
+          offlineMode = false;
+          setConnBanner(false, "");
           applyStateFromServer(data);
         } catch (e) {
           alert(e.message || String(e));
@@ -388,6 +710,10 @@
        */
       async function onNextStageClick() {
         if (interviewFinished || isAdvancing) return;
+        if (offlineMode) {
+          alert("当前未连接到后端。请先启动服务并点击「重试连接」。");
+          return;
+        }
 
         if (currentStep >= 5) {
           isAdvancing = true;
@@ -397,6 +723,8 @@
               method: "POST",
               body: "{}",
             });
+            offlineMode = false;
+            setConnBanner(false, "");
             applyStateFromServer(data);
           } catch (e) {
             alert(e.message || String(e));
@@ -419,6 +747,8 @@
             method: "POST",
             body: JSON.stringify({ step: currentStep }),
           });
+          offlineMode = false;
+          setConnBanner(false, "");
           applyStateFromServer(data);
         } catch (e) {
           currentStep = prevStep;
@@ -435,8 +765,20 @@
 
       async function resetSession() {
         if (!confirm("确定重置？当前进度将清空。")) return;
-        const data = await api("/api/reset", { method: "POST", body: "{}" });
-        applyStateFromServer(data);
+        if (offlineMode) {
+          applyStateFromServer(FALLBACK_STATE);
+          currentStep = 1;
+          renderStepHeader(1);
+          return;
+        }
+        try {
+          const data = await api("/api/reset", { method: "POST", body: "{}" });
+          offlineMode = false;
+          setConnBanner(false, "");
+          applyStateFromServer(data);
+        } catch (e) {
+          alert(e.message || String(e));
+        }
       }
 
       function openLightbox(url) {
