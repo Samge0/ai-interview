@@ -22,6 +22,9 @@
         window.__API_ORIGIN__ = "http://127.0.0.1:8000";
       })();
     </script>
+    <script>
+      window.__AIGC_PAGE_META__ = {{ aigc_client_json|safe }};
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       :root {
@@ -93,6 +96,54 @@
         <div class="flex items-center gap-1.5" id="stepSegments" aria-label="步骤 1 到 5"></div>
         <p id="stepSub" class="mt-1.5 text-xs text-gray-500"></p>
       </div>
+      <details
+        class="mx-auto max-w-lg border-t border-gray-100 px-4 pb-2 pt-1"
+        id="aigcConfigDetails"
+      >
+        <summary
+          class="cursor-pointer list-none select-none text-[11px] font-medium text-gray-400 marker:content-none hover:text-gray-600 [&::-webkit-details-marker]:hidden"
+        >
+          <span class="underline decoration-gray-300 decoration-dotted underline-offset-2"
+            >AIGC 生图 API</span
+          >
+          <span class="font-normal text-gray-400">（服务端 .env，不含密钥）</span>
+        </summary>
+        <div
+          class="mt-2 space-y-1.5 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-[11px] leading-relaxed text-gray-700"
+        >
+          <p>
+            <span class="text-gray-400">IMAGE_API_KEY</span>：
+            {% if aigc_key_configured %}已配置{% else %}未配置{% endif %}
+          </p>
+          <p>
+            <span class="text-gray-400">IMAGE_API_BASE_URL</span>：{% if aigc_base_url %}{{ aigc_base_url }}{% else %}（未设置）{% endif %}
+          </p>
+          <p><span class="text-gray-400">IMAGE_API_MODEL</span>：{{ aigc_model }}</p>
+          <p><span class="text-gray-400">当前路由</span>：{{ aigc_route_label }}</p>
+          {% if aigc_chat_completions_url %}
+          <p class="break-all">
+            <span class="text-gray-400">Chat</span>：{{ aigc_chat_completions_url }}
+          </p>
+          {% endif %}
+          {% if aigc_images_generations_url %}
+          <p class="break-all">
+            <span class="text-gray-400">Images</span>：{{ aigc_images_generations_url }}
+          </p>
+          {% endif %}
+          <p class="flex flex-wrap gap-x-3 gap-y-1 border-t border-gray-200 pt-2 text-gray-500">
+            <a class="text-blue-600 underline" href="/api/health" target="_blank" rel="noopener noreferrer"
+              >/api/health</a
+            >
+            <a
+              class="text-blue-600 underline"
+              href="/api/health/image"
+              target="_blank"
+              rel="noopener noreferrer"
+              >/api/health/image</a
+            >
+          </p>
+        </div>
+      </details>
     </header>
 
     <div
@@ -130,13 +181,6 @@
       class="z-30 flex-none border-t border-gray-200 bg-white pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.06)]"
     >
       <div class="mx-auto max-w-lg space-y-2 px-3 py-2">
-        <button
-          id="nextStageBtn"
-          type="button"
-          class="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-blue-500 bg-white py-3 text-sm font-bold text-blue-600 shadow-sm active:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:shadow-none"
-        >
-          <span id="nextStageLabel">进入下一阶段 (Next Stage)</span>
-        </button>
         <div class="flex items-end gap-2">
           <label class="sr-only" for="msgInput">输入回复</label>
           <textarea
@@ -178,6 +222,19 @@
           </button>
         </div>
         <p id="voiceStatus" class="hidden text-center text-[11px] text-red-500"></p>
+        <p
+          id="sendFlowTip"
+          class="hidden min-h-[1.25rem] text-center text-[12px] leading-snug text-gray-600"
+          role="status"
+          aria-live="polite"
+        ></p>
+        <button
+          id="nextStageBtn"
+          type="button"
+          class="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-100 py-3 text-sm font-medium text-gray-400 opacity-95"
+        >
+          <span id="nextStageLabel">进入下一阶段 (Next Stage)</span>
+        </button>
       </div>
     </footer>
 
@@ -250,9 +307,12 @@
       const lightboxClose = document.getElementById("lightboxClose");
       const micBtn = document.getElementById("micBtn");
       const voiceStatus = document.getElementById("voiceStatus");
+      const sendFlowTip = document.getElementById("sendFlowTip");
 
       /** 与后端同步的当前阶段（1–5） */
       let currentStep = 1;
+      /** 当前阶段内用户已发送条数（与 /api/state 的 user_turns_in_step 一致） */
+      let userTurnsInStep = 0;
       let isSending = false;
       let isAdvancing = false;
       let interviewFinished = false;
@@ -326,6 +386,10 @@
       let speechRecognition = null;
       let speechSessionFinal = "";
       let speechVoicePrefix = "";
+      /** 语音识别过程中最近一次非空全文；防止点击「发送」失焦后部分浏览器清空 interim 导致读不到内容 */
+      let lastNonEmptyVoiceValue = "";
+      /** 在「发送」pointerdown 时记下内容，避免触控端 click 触发前已 blur 导致读不到框内文字 */
+      let sendPointerSnap = { box: "", voice: "" };
 
       function setMicListeningUI(on) {
         micBtn.setAttribute("aria-pressed", on ? "true" : "false");
@@ -359,6 +423,7 @@
           setMicListeningUI(true);
           speechSessionFinal = "";
           speechVoicePrefix = msgInput.value;
+          lastNonEmptyVoiceValue = (msgInput.value || "").trim();
           showVoiceHint("");
         };
 
@@ -369,7 +434,9 @@
             if (event.results[i].isFinal) speechSessionFinal += piece;
             else interim += piece;
           }
-          msgInput.value = speechVoicePrefix + speechSessionFinal + interim;
+          const merged = speechVoicePrefix + speechSessionFinal + interim;
+          msgInput.value = merged;
+          if (merged.trim()) lastNonEmptyVoiceValue = merged;
           msgInput.dispatchEvent(new Event("input", { bubbles: true }));
         };
 
@@ -440,6 +507,37 @@
         toggleSpeechRecognition();
       });
 
+      /** 发送前先停麦并等待 onend，便于浏览器把末尾 interim 固化为 final 写回输入框 */
+      function stopSpeechAndWait() {
+        return new Promise((resolve) => {
+          const rec = speechRecognition;
+          if (!rec || !micBtn.classList.contains("mic-listening")) {
+            resolve();
+            return;
+          }
+          const prevEnd = rec.onend;
+          const tid = setTimeout(() => {
+            rec.onend = prevEnd;
+            resolve();
+          }, 450);
+          rec.onend = () => {
+            clearTimeout(tid);
+            try {
+              if (typeof prevEnd === "function") prevEnd.call(rec);
+            } catch (_) {}
+            rec.onend = prevEnd;
+            resolve();
+          };
+          try {
+            rec.stop();
+          } catch (_) {
+            clearTimeout(tid);
+            rec.onend = prevEnd;
+            resolve();
+          }
+        });
+      }
+
       function el(tag, cls, text) {
         const n = document.createElement(tag);
         if (cls) n.className = cls;
@@ -447,18 +545,83 @@
         return n;
       }
 
+      const NEXT_STAGE_ROW =
+        "flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm transition-colors";
+      const NEXT_STAGE_READY =
+        NEXT_STAGE_ROW +
+        " cursor-pointer border-2 border-blue-500 bg-white font-bold text-blue-600 shadow-sm active:bg-blue-50";
+      const NEXT_STAGE_LOCKED =
+        NEXT_STAGE_ROW +
+        " cursor-not-allowed border border-gray-200 bg-gray-100 font-medium text-gray-400 opacity-95";
+
+      function minUserTurnsToAdvance(step) {
+        if (step >= 5) return 1;
+        return step === 1 ? 2 : 1;
+      }
+
       function updateNextStageButton() {
         if (interviewFinished) {
+          nextStageBtn.className = NEXT_STAGE_LOCKED;
           nextStageBtn.disabled = true;
           nextStageLabel.textContent = "访谈已结束";
+          nextStageBtn.removeAttribute("title");
           return;
         }
         if (currentStep >= 5) {
-          nextStageBtn.disabled = false;
           nextStageLabel.textContent = "结束访谈";
+          const need = minUserTurnsToAdvance(5);
+          const canAct = userTurnsInStep >= need && !isAdvancing;
+          const locked = !canAct || isAdvancing;
+          nextStageBtn.disabled = locked;
+          nextStageBtn.className = locked ? NEXT_STAGE_LOCKED : NEXT_STAGE_READY;
+          if (locked && !isAdvancing) {
+            nextStageBtn.title = "请在本阶段至少发送 1 条回复后再结束访谈。";
+          } else {
+            nextStageBtn.removeAttribute("title");
+          }
+          return;
+        }
+        nextStageLabel.textContent = "进入下一阶段 (Next Stage)";
+        const need = minUserTurnsToAdvance(currentStep);
+        const canAct = userTurnsInStep >= need && !isAdvancing;
+        const locked = !canAct || isAdvancing;
+        nextStageBtn.disabled = locked;
+        nextStageBtn.className = locked ? NEXT_STAGE_LOCKED : NEXT_STAGE_READY;
+        if (locked && !isAdvancing) {
+          nextStageBtn.title =
+            currentStep === 1
+              ? "第一阶段：请至少发送 2 条消息（例如先答开场问题，再答主持追问）后再进入下一阶段。"
+              : "请在本阶段至少发送 1 条消息后再进入下一阶段。";
         } else {
-          nextStageBtn.disabled = false;
-          nextStageLabel.textContent = "进入下一阶段 (Next Stage)";
+          nextStageBtn.removeAttribute("title");
+        }
+      }
+
+      function hideSendFlowTip() {
+        if (!sendFlowTip) return;
+        clearTimeout(hideSendFlowTip._t);
+        sendFlowTip.textContent = "";
+        sendFlowTip.className =
+          "hidden min-h-[1.25rem] text-center text-[12px] leading-snug text-gray-600";
+      }
+
+      /** @param {"wait"|"ok"|"err"} kind */
+      function showSendFlowTip(text, kind, autoHideMs) {
+        if (!sendFlowTip) return;
+        clearTimeout(hideSendFlowTip._t);
+        sendFlowTip.classList.remove("hidden");
+        const color =
+          kind === "ok"
+            ? "text-emerald-700"
+            : kind === "err"
+              ? "text-red-600"
+              : "text-gray-600";
+        const pulse = kind === "wait" ? " motion-safe:animate-pulse" : "";
+        sendFlowTip.className =
+          `min-h-[1.25rem] text-center text-[12px] leading-snug ${color}` + pulse;
+        sendFlowTip.textContent = text;
+        if (autoHideMs > 0) {
+          hideSendFlowTip._t = setTimeout(hideSendFlowTip, autoHideMs);
         }
       }
 
@@ -599,6 +762,7 @@
 
       function applyStateFromServer(data) {
         currentStep = data.step || 1;
+        userTurnsInStep = Number(data.user_turns_in_step) || 0;
         interviewFinished = !!data.finished;
         if (interviewFinished && speechRecognition && micBtn.classList.contains("mic-listening")) {
           try {
@@ -675,8 +839,16 @@
       }
 
       async function sendMessage() {
-        const t = msgInput.value.trim();
-        if (!t || isSending || interviewFinished) return;
+        if (isSending || interviewFinished) return;
+        const snapVoice =
+          lastNonEmptyVoiceValue.trim() || String(sendPointerSnap.voice || "").trim();
+        const snapBox = msgInput.value.trim() || String(sendPointerSnap.box || "").trim();
+        await stopSpeechAndWait();
+        const t = (msgInput.value.trim() || snapBox || snapVoice || "").trim();
+        if (!t) {
+          alert("没有可发送的文字。请先输入或使用语音说完后再点发送（若正在识别，可先点麦克风结束识别再发送）。");
+          return;
+        }
         if (offlineMode) {
           alert("当前未连接到后端，无法发送。请先启动 uvicorn 并点击上方「重试连接」。");
           return;
@@ -684,17 +856,22 @@
         isSending = true;
         sendBtn.disabled = true;
         sendBtn.textContent = "…";
+        showSendFlowTip("正在发送，请稍候…（主持回复可能需要十几秒）", "wait", 0);
         try {
           const data = await api("/api/chat", {
             method: "POST",
             body: JSON.stringify({ message: t, step: currentStep }),
           });
           msgInput.value = "";
+          lastNonEmptyVoiceValue = "";
+          sendPointerSnap = { box: "", voice: "" };
           msgInput.style.height = "auto";
           offlineMode = false;
           setConnBanner(false, "");
           applyStateFromServer(data);
+          showSendFlowTip("已发送，主持已回复。", "ok", 3200);
         } catch (e) {
+          hideSendFlowTip();
           alert(e.message || String(e));
         } finally {
           isSending = false;
@@ -709,7 +886,7 @@
        * 第 5 阶段时按钮为「结束访谈」，不增加 step。
        */
       async function onNextStageClick() {
-        if (interviewFinished || isAdvancing) return;
+        if (interviewFinished || isAdvancing || nextStageBtn.disabled) return;
         if (offlineMode) {
           alert("当前未连接到后端。请先启动服务并点击「重试连接」。");
           return;
@@ -717,7 +894,7 @@
 
         if (currentStep >= 5) {
           isAdvancing = true;
-          nextStageBtn.disabled = true;
+          updateNextStageButton();
           try {
             const data = await api("/api/finish-interview", {
               method: "POST",
@@ -735,13 +912,23 @@
           return;
         }
 
+        const need = minUserTurnsToAdvance(currentStep);
+        if (userTurnsInStep < need) {
+          alert(
+            currentStep === 1
+              ? "第一阶段需至少发送 2 条消息后再进入下一阶段。"
+              : "请在本阶段至少发送 1 条消息后再进入下一阶段。"
+          );
+          return;
+        }
+
         const prevStep = currentStep;
         const nextStep = Math.min(5, currentStep + 1);
         currentStep = nextStep;
         renderStepHeader(currentStep);
 
         isAdvancing = true;
-        nextStageBtn.disabled = true;
+        updateNextStageButton();
         try {
           const data = await api("/api/advance-stage", {
             method: "POST",
@@ -793,6 +980,14 @@
         lightboxImg.removeAttribute("src");
       }
 
+      /* 避免按钮 mousedown 抢焦点导致输入框 blur、部分环境下语音识别 interim 被清空 */
+      sendBtn.addEventListener("mousedown", (e) => {
+        if (e.button === 0) e.preventDefault();
+      });
+      sendBtn.addEventListener("pointerdown", () => {
+        sendPointerSnap.box = msgInput.value;
+        sendPointerSnap.voice = lastNonEmptyVoiceValue;
+      });
       sendBtn.addEventListener("click", sendMessage);
       nextStageBtn.addEventListener("click", onNextStageClick);
       resetBtn.addEventListener("click", resetSession);
