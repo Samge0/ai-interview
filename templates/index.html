@@ -95,6 +95,9 @@
       <div class="modal-content">
         <h2 class="text-xl font-bold text-gray-900 mb-2">欢迎参与访谈</h2>
         <p class="text-sm text-gray-600 mb-4">请输入您的姓名，以便我们保存您的访谈记录。</p>
+        <div id="usernameModalError" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p class="text-sm text-red-600"></p>
+        </div>
         <input
           id="usernameInput"
           type="text"
@@ -456,6 +459,7 @@
       const usernameModal = document.getElementById("usernameModal");
       const usernameInput = document.getElementById("usernameInput");
       const usernameSubmitBtn = document.getElementById("usernameSubmitBtn");
+      const usernameModalError = document.getElementById("usernameModalError");
 
       function showUsernameModal() {
         usernameModal.classList.remove("hidden");
@@ -464,9 +468,23 @@
 
       function hideUsernameModal() {
         usernameModal.classList.add("hidden");
+        hideUsernameModalError();
+      }
+
+      function showUsernameModalError(message) {
+        usernameModalError.classList.remove("hidden");
+        const errorText = usernameModalError.querySelector("p");
+        if (errorText) {
+          errorText.textContent = message || "操作失败，请重试";
+        }
+      }
+
+      function hideUsernameModalError() {
+        usernameModalError.classList.add("hidden");
       }
 
       async function submitUsername() {
+        hideUsernameModalError();
         const name = (usernameInput.value || "").trim();
         if (!name) {
           alert("请输入您的姓名");
@@ -481,7 +499,7 @@
           usernameSubmitBtn.disabled = true;
           usernameSubmitBtn.textContent = "提交中…";
 
-          await api("/api/set-username", {
+          const data = await api("/api/set-username", {
             method: "POST",
             body: JSON.stringify({ username: name, access_code: accessCode }),
           });
@@ -489,8 +507,17 @@
           username = name;
           usernameSet = true;
           hideUsernameModal();
+
+          // 应用返回的状态数据，显示初始消息
+          applyStateFromServer(data);
         } catch (e) {
-          alert("设置姓名失败：" + (e.message || String(e)));
+          // 如果是访问口令错误，显示错误提示
+          if (e.isAccessCodeDenied) {
+            showUsernameModalError("访问口令错误，请检查后重试");
+            usernameInput.focus();
+          } else {
+            alert("设置失败：" + (e.message || String(e)));
+          }
         } finally {
           usernameSubmitBtn.disabled = false;
           usernameSubmitBtn.textContent = "开始访谈";
@@ -918,12 +945,8 @@
         userTurnsInStep = Number(data.user_turns_in_step) || 0;
         interviewFinished = !!data.finished;
 
-        // 处理用户名
-        if (data.username) {
-          username = data.username;
-          usernameSet = true;
-          hideUsernameModal();
-        }
+        // 不再自动处理用户名，每次刷新都需要重新输入
+        // 用户名只在成功提交后设置
         if (interviewFinished && speechRecognition && micBtn.classList.contains("mic-listening")) {
           try {
             speechRecognition.stop();
@@ -978,7 +1001,15 @@
         }
         if (!res.ok) {
           const detail = json.detail || json.message || res.statusText;
-          throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+          const error = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+          // 403 表示访问口令验证失败，清除状态并重新显示弹窗
+          if (res.status === 403) {
+            error.isAccessCodeDenied = true;
+            usernameSet = false;
+            username = "";
+            showUsernameModal();
+          }
+          throw error;
         }
         syncSessionIdFromPayload(json);
         return json;
@@ -991,13 +1022,12 @@
           const data = await api("/api/state");
           offlineMode = false;
           applyStateFromServer(data);
-
-          // 如果未设置用户名，显示输入弹窗
-          if (!usernameSet && !username) {
-            showUsernameModal();
-          }
         } catch (e) {
           console.error(e);
+          // 如果是访问口令验证失败，不显示离线模式，弹窗已经自动显示
+          if (e.isAccessCodeDenied) {
+            return;
+          }
           offlineMode = true;
           setConnBanner(
             true,
@@ -1005,7 +1035,11 @@
               "无法连接后端。请先在项目目录执行：python -m uvicorn main:app --host 127.0.0.1 --port 8000 ，再在浏览器打开同一地址（不要双击磁盘上的 index.html）。"
           );
           applyStateFromServer(FALLBACK_STATE);
+          return;
         }
+
+        // 每次页面加载都显示输入弹窗（问卷模式，不持久化用户状态）
+        showUsernameModal();
       }
 
       async function sendMessage() {

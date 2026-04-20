@@ -6,19 +6,8 @@ services:
     container_name: ai-interview-app
     ports:
       - "8000:8000"
-    environment:
-      # OpenAI 兼容 API 配置
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.newcoin.tech}
-      - OPENAI_MODEL=${OPENAI_MODEL:-doubao-seed-2-0-pro-260215}
-
-      # AIGC 生图 API 配置
-      - IMAGE_API_KEY=${IMAGE_API_KEY}
-      - IMAGE_API_BASE_URL=${IMAGE_API_BASE_URL:-https://new.suxi.ai}
-      - IMAGE_API_MODEL=${IMAGE_API_MODEL:-gemini-2.5-flash-image}
-
-      # 访问口令（可选）
-      - ACCESS_CODE=${ACCESS_CODE}
+    env_file:
+      - .env
     volumes:
       # 持久化输出目录
       - ./output:/app/output

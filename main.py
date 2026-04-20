@@ -660,6 +660,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 访问口令中间件（如果配置了 ACCESS_CODE，则校验）
+@app.middleware("http")
+async def access_code_middleware(request: Request, call_next):
+    # 如果未配置访问口令，直接放行
+    if not ACCESS_CODE:
+        return await call_next(request)
+
+    path = request.url.path
+
+    # 不需要验证的路径（首页允许加载以便显示弹窗）
+    excluded_paths = {"/", "/api/set-username", "/api/health", "/api/health/llm", "/api/health/image"}
+    if path in excluded_paths:
+        return await call_next(request)
+
+    # 检查 cookie 中的访问口令
+    client_access_code = (request.cookies.get("access_code") or "").strip()
+    if client_access_code == ACCESS_CODE:
+        return await call_next(request)
+
+    # 访问口令验证失败，返回 403
+    return JSONResponse(
+        status_code=403,
+        content={"detail": "请输入正确的访问口令"}
+    )
+
 templates = Jinja2Templates(directory="templates")
 
 if os.path.isdir("static"):
@@ -677,7 +702,7 @@ def session_id_from_request(request: Request) -> Optional[str]:
     return None
 
 
-def cookie_response(sid: str, body: dict[str, Any]) -> JSONResponse:
+def cookie_response(sid: str, body: dict[str, Any], access_code: Optional[str] = None) -> JSONResponse:
     """JSON 内始终带 session_id，便于前端在 Cookie 不可写时仍用请求头续聊。"""
     out = {**body, "session_id": sid}
     resp = JSONResponse(out)
@@ -686,8 +711,15 @@ def cookie_response(sid: str, body: dict[str, Any]) -> JSONResponse:
         value=sid,
         httponly=True,
         samesite="lax",
-        max_age=60 * 60 * 24 * 7,
     )
+    # 如果提供了访问口令且配置了 ACCESS_CODE，设置访问口令 cookie（session 级别）
+    if access_code and ACCESS_CODE and access_code == ACCESS_CODE:
+        resp.set_cookie(
+            key="access_code",
+            value=access_code,
+            httponly=True,
+            samesite="lax",
+        )
     return resp
 
 
@@ -729,7 +761,14 @@ def _aigc_page_context() -> dict[str, Any]:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, response: Response):
-    sid, _ = get_or_create_session(session_id_from_request(request))
+    # 问卷模式：每次访问首页都创建新会话
+    old_sid = session_id_from_request(request)
+    new_sid = str(uuid.uuid4())
+    SESSION_STORE[new_sid] = _new_session_state()
+    # 清除旧会话（如果存在）
+    if old_sid and old_sid in SESSION_STORE:
+        del SESSION_STORE[old_sid]
+
     # Starlette 约定：TemplateResponse(request, 模板名, context)；勿把 (name, dict) 旧顺序混用，否则会 500
     ctx: dict[str, Any] = {"app_title": "AI 深访实验"}
     ctx.update(_aigc_page_context())
@@ -738,12 +777,12 @@ async def index(request: Request, response: Response):
         "index.html",
         ctx,
     )
+    # 设置会话 cookie（session 级别，浏览器关闭后失效）
     resp.set_cookie(
         key="session_id",
-        value=sid,
+        value=new_sid,
         httponly=True,
         samesite="lax",
-        max_age=60 * 60 * 24 * 7,
     )
     return resp
 
@@ -931,15 +970,17 @@ async def api_set_username(request: Request, payload: dict[str, Any]):
         raise HTTPException(status_code=400, detail="用户名不能为空")
 
     # 验证访问口令（如果配置了）
+    verified_access_code = None
     if ACCESS_CODE:
         access_code = (payload.get("access_code") or "").strip()
         if access_code != ACCESS_CODE:
             raise HTTPException(status_code=403, detail="访问口令错误，请检查后重试")
+        verified_access_code = access_code
 
     sid, state = get_or_create_session(session_id_from_request(request))
     state.username = username
 
-    return cookie_response(sid, {**state.to_public_dict()})
+    return cookie_response(sid, {**state.to_public_dict()}, access_code=verified_access_code)
 
 
 @app.post("/api/save-chat")
