@@ -11,6 +11,8 @@ import json
 import os
 import re
 import uuid
+from datetime import datetime
+from pathlib import Path
 
 try:
     from dotenv import load_dotenv
@@ -290,6 +292,7 @@ class SessionState:
     user_turns_in_step: int = 0
     last_image_prompt: str = ""
     finished: bool = False
+    username: str = ""
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
@@ -297,11 +300,42 @@ class SessionState:
             "max_step": 5,
             "user_turns_in_step": self.user_turns_in_step,
             "finished": self.finished,
+            "username": self.username,
             "messages": [m.to_dict() for m in self.messages],
         }
 
 
 SESSION_STORE: dict[str, SessionState] = {}
+
+# 确保 output 目录存在
+OUTPUT_DIR = Path("output")
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+
+def save_chat_to_file(username: str, session_id: str, state: SessionState) -> str:
+    """将聊天数据保存到 output/用户名.json 文件"""
+    if not username:
+        username = "anonymous"
+
+    # 构建文件名（移除文件名中的非法字符）
+    safe_username = re.sub(r'[<>:"/\\|?*]', '_', username)
+    filename = OUTPUT_DIR / f"{safe_username}.json"
+
+    # 准备保存的数据
+    save_data = {
+        "username": username,
+        "session_id": session_id,
+        "saved_at": datetime.now().isoformat(),
+        "step": state.step,
+        "finished": state.finished,
+        "messages": [m.to_dict() for m in state.messages],
+    }
+
+    # 写入文件
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(save_data, f, ensure_ascii=False, indent=2)
+
+    return str(filename)
 
 
 def _new_session_state() -> SessionState:
@@ -884,6 +918,41 @@ async def api_finish_interview(request: Request):
         )
     )
     return cookie_response(sid, {**state.to_public_dict()})
+
+
+@app.post("/api/set-username")
+async def api_set_username(request: Request, payload: dict[str, Any]):
+    """设置用户名"""
+    username = (payload.get("username") or "").strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="用户名不能为空")
+
+    sid, state = get_or_create_session(session_id_from_request(request))
+    state.username = username
+
+    return cookie_response(sid, {**state.to_public_dict()})
+
+
+@app.post("/api/save-chat")
+async def api_save_chat(request: Request):
+    """保存当前聊天数据到文件"""
+    sid, state = get_or_create_session(session_id_from_request(request))
+
+    if not state.username:
+        raise HTTPException(status_code=400, detail="请先设置用户名")
+
+    try:
+        filepath = save_chat_to_file(state.username, sid, state)
+        return cookie_response(sid, {
+            "ok": True,
+            "filepath": filepath,
+            "username": state.username,
+            "message_count": len(state.messages),
+            "step": state.step,
+            "finished": state.finished,
+        })
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"保存失败: {exc}") from exc
 
 
 @app.post("/api/reset")
