@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 访谈原型 - 多阶段智能对话平台</title>
+    <link rel="icon" type="image/png" href="icon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans SC"', '"Inter"', 'sans-serif'],
+                        serif: ['"Noto Serif SC"', '"Manrope"', 'serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f3e9ff',
+                            100: '#e0b3ff',
+                            200: '#c77dff',
+                            300: '#a44ff2',
+                            400: '#9867e7',
+                            500: '#8741d8',
+                            600: '#7a2fc9',
+                            700: '#6826b0',
+                            800: '#542191',
+                            900: '#431d78',
+                        },
+                        neutral: {
+                            50: '#fafafa',
+                            100: '#f5f5f5',
+                            200: '#e5e5e5',
+                            300: '#d4d4d4',
+                            400: '#a3a3a3',
+                            500: '#737373',
+                            600: '#525252',
+                            700: '#404040',
+                            800: '#262626',
+                            900: '#171717',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #fafafa 0%, #f3e9ff 50%, #e5e5e5 100%);
+            min-height: 100vh;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .glass-dark {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(135, 65, 216, 0.1);
+        }
+        .gradient-icon {
+            background: linear-gradient(135deg, #8741d8 0%, #a44ff2 100%);
+        }
+        .text-gradient {
+            background: linear-gradient(135deg, #8741d8 0%, #c77dff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+    </style>
+</head>
+<body class="font-sans antialiased text-neutral-800">
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 z-50 glass">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-3">
+                    <img src="icon.png" alt="AI 访谈原型" class="w-9 h-9 rounded-lg">
+                    <span class="text-xl font-bold text-neutral-900">AI 访谈原型</span>
+                </div>
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#features" class="text-neutral-600 hover:text-white transition-colors">特性</a>
+                    <a href="#how-it-works" class="text-neutral-600 hover:text-white transition-colors">工作原理</a>
+                    <a href="#faq" class="text-neutral-600 hover:text-white transition-colors">常见问题</a>
+                    <a href="https://github.com" target="_blank" class="text-neutral-600 hover:text-white transition-colors">GitHub</a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="#get-started" class="gradient-icon text-white px-5 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                        立即开始
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto text-center">
+            <div class="inline-flex items-center space-x-2 glass px-4 py-2 rounded-full mb-6">
+                <div class="w-2 h-2 bg-brand-500 rounded-full animate-pulse"></div>
+                <span class="text-sm font-medium text-neutral-700">基于 FastAPI 的智能访谈平台</span>
+            </div>
+            <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold text-neutral-900 mb-6 max-w-4xl mx-auto leading-tight">
+                多阶段 <span class="text-gradient">AI 访谈</span> 应用<br>
+                支持图片生成与访问保护
+            </h1>
+            <p class="text-lg sm:text-xl text-neutral-600 mb-8 max-w-3xl mx-auto" style="max-width: 65ch;">
+                构建结构化对话流程，集成最新 AI 模型，支持图片生成与安全访问控制。
+                灵活配置、持久化存储，开箱即用的企业级解决方案。
+            </p>
+            <div class="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4">
+                <a href="#get-started" class="w-full sm:w-auto gradient-icon text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity shadow-lg">
+                    开始使用
+                </a>
+                <a href="#features" class="w-full sm:w-auto glass-dark text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/90 transition-colors">
+                    了解更多
+                </a>
+            </div>
+            
+            <div class="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                <div class="glass-dark rounded-2xl p-6 card-hover">
+                    <div class="gradient-icon w-12 h-12 rounded-xl flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                    <div class="text-2xl font-bold text-neutral-900">5 阶段访谈</div>
+                    <div class="text-sm text-neutral-500 mt-1">结构化对话流程</div>
+                </div>
+                <div class="glass-dark rounded-2xl p-6 card-hover">
+                    <div class="gradient-icon w-12 h-12 rounded-xl flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                    </div>
+                    <div class="text-2xl font-bold text-neutral-900">访问保护</div>
+                    <div class="text-sm text-neutral-500 mt-1">可选口令验证</div>
+                </div>
+                <div class="glass-dark rounded-2xl p-6 card-hover">
+                    <div class="gradient-icon w-12 h-12 rounded-xl flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <div class="text-2xl font-bold text-neutral-900">图片生成</div>
+                    <div class="text-sm text-neutral-500 mt-1">集成多种 API</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl sm:text-4xl font-bold text-neutral-900 mb-4">强大功能特性</h2>
+                <p class="text-lg text-neutral-600 max-w-2xl mx-auto">
+                    为专业访谈场景设计，提供完整的对话管理与内容生成能力
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Feature 1 -->
+                <div class="glass-dark rounded-2xl p-8 card-hover">
+                    <div class="gradient-icon w-14 h-14 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold text-neutral-900 mb-3">多阶段访谈流程</h3>
+                    <p class="text-neutral-600 leading-relaxed">
+                        支持 5 个独立的访谈阶段，每个阶段配备专属系统提示词，确保对话结构化、专业化的进行。
+                    </p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="glass-dark rounded-2xl p-8 card-hover">
+                    <div class="gradient-icon w-14 h-14 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold text-neutral-900 mb-3">访问口令保护</h3>
+                    <p class="text-neutral-600 leading-relaxed">
+                        可选的访问口令验证机制，有效防止公网环境下的未授权访问，保护对话隐私与数据安全。
+                    </p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="glass-dark rounded-2xl p-8 card-hover">
+                    <div class="gradient-icon w-14 h-14 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold text-neutral-900 mb-3">多源图片生成</h3>
+                    <p class="text-neutral-600 leading-relaxed">
+                        集成 DALL·E、Imagen、Gemini 等主流图片生成 API，支持灵活配置，为对话内容添加视觉元素。
+                    </p>
+                </div>
+
+                <!-- Feature 4 -->
+                <div class="glass-dark rounded-2xl p-8 card-hover">
+                    <div class="gradient-icon w-14 h-14 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold text-neutral-900 mb-3">灵活配置选项</h3>
+                    <p class="text-neutral-600 leading-relaxed">
+                        支持 OpenAI 兼容的各种 API 提供商，轻松切换模型与服务提供商，满足不同场景需求。
+                    </p>
+                </div>
+
+                <!-- Feature 5 -->
+                <div class="glass-dark rounded-2xl p-8 card-hover">
+                    <div class="gradient-icon w-14 h-14 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold text-neutral-900 mb-3">持久化存储</h3>
+                    <p class="text-neutral-600 leading-relaxed">
+                        访谈记录自动保存到本地，支持历史回顾与数据分析，确保对话内容永不丢失。
+                    </p>
+                </div>
+
+                <!-- Feature 6 -->
+                <div class="glass-dark rounded-2xl p-8 card-hover">
+                    <div class="gradient-icon w-14 h-14 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold text-neutral-900 mb-3">容器化部署</h3>
+                    <p class="text-neutral-600 leading-relaxed">
+                        提供 Docker 与源码两种部署方式，支持快速启动与深度定制，适配各种运行环境。
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it Works Section -->
+    <section id="how-it-works" class="py-20 px-4 sm:px-6 lg:px-8 bg-white/50">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl sm:text-4xl font-bold text-neutral-900 mb-4">快速部署指南</h2>
+                <p class="text-lg text-neutral-600 max-w-2xl mx-auto">
+                    选择适合你的部署方式，几分钟内即可启动 AI 访谈应用
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Docker Deployment -->
+                <div class="glass-dark rounded-2xl p-8 card-hover">
+                    <div class="gradient-icon w-12 h-12 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-2xl font-semibold text-neutral-900 mb-4">Docker 部署（推荐）</h3>
+                    <div class="space-y-4 text-neutral-600">
+                        <div class="flex items-start space-x-3">
+                            <div class="gradient-icon w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-white text-xs font-bold">1</span>
+                            </div>
+                            <div>
+                                <div class="font-medium text-neutral-800">克隆项目</div>
+                                <div class="text-sm">git clone &lt;repository-url&gt; &amp;&amp; cd AI-Interview</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start space-x-3">
+                            <div class="gradient-icon w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-white text-xs font-bold">2</span>
+                            </div>
+                            <div>
+                                <div class="font-medium text-neutral-800">配置环境变量</div>
+                                <div class="text-sm">复制 .env.example 到 .env 并填写配置</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start space-x-3">
+                            <div class="gradient-icon w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-white text-xs font-bold">3</span>
+                            </div>
+                            <div>
+                                <div class="font-medium text-neutral-800">启动服务</div>
+                                <div class="text-sm">docker-compose up -d</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start space-x-3">
+                            <div class="gradient-icon w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-white text-xs font-bold">4</span>
+                            </div>
+                            <div>
+                                <div class="font-medium text-neutral-800">访问应用</div>
+                                <div class="text-sm">http://localhost:8000</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Source Deployment -->
+                <div class="glass-dark rounded-2xl p-8 card-hover">
+                    <div class="gradient-icon w-12 h-12 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-2xl font-semibold text-neutral-900 mb-4">源码部署（使用 uv）</h3>
+                    <div class="space-y-4 text-neutral-600">
+                        <div class="flex items-start space-x-3">
+                            <div class="gradient-icon w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-white text-xs font-bold">1</span>
+                            </div>
+                            <div>
+                                <div class="font-medium text-neutral-800">安装 uv</div>
+                                <div class="text-sm">使用官方脚本安装 Python 包管理器</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start space-x-3">
+                            <div class="gradient-icon w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-white text-xs font-bold">2</span>
+                            </div>
+                            <div>
+                                <div class="font-medium text-neutral-800">创建虚拟环境</div>
+                                <div class="text-sm">uv venv 并激活虚拟环境</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start space-x-3">
+                            <div class="gradient-icon w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-white text-xs font-bold">3</span>
+                            </div>
+                            <div>
+                                <div class="font-medium text-neutral-800">安装依赖</div>
+                                <div class="text-sm">uv pip install -r requirements.txt</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start space-x-3">
+                            <div class="gradient-icon w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-white text-xs font-bold">4</span>
+                            </div>
+                            <div>
+                                <div class="font-medium text-neutral-800">启动应用</div>
+                                <div class="text-sm">uvicorn main:app --host 0.0.0.0 --port 8000 --reload</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Environment Variables -->
+            <div class="mt-16">
+                <h3 class="text-2xl font-semibold text-neutral-900 mb-6 text-center">环境变量配置</h3>
+                <div class="glass-dark rounded-2xl overflow-hidden">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-neutral-200">
+                                <th class="text-left p-4 font-semibold text-neutral-900">变量名</th>
+                                <th class="text-left p-4 font-semibold text-neutral-900">必填</th>
+                                <th class="text-left p-4 font-semibold text-neutral-900">说明</th>
+                                <th class="text-left p-4 font-semibold text-neutral-900">默认值</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-neutral-100">
+                            <tr>
+                                <td class="p-4 font-mono text-sm text-white">OPENAI_API_KEY</td>
+                                <td class="p-4"><span class="px-2 py-1 bg-gradient-to-br from-blue-500 to-blue-600 shadow-sm shadow-blue-500/30 text-red-700 text-xs rounded-full">是</span></td>
+                                <td class="p-4 text-neutral-600">LLM API 密钥</td>
+                                <td class="p-4 text-neutral-400">-</td>
+                            </tr>
+                            <tr>
+                                <td class="p-4 font-mono text-sm text-white">OPENAI_BASE_URL</td>
+                                <td class="p-4"><span class="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">否</span></td>
+                                <td class="p-4 text-neutral-600">LLM API 基础地址</td>
+                                <td class="p-4 font-mono text-xs text-neutral-500">https://api.newcoin.tech</td>
+                            </tr>
+                            <tr>
+                                <td class="p-4 font-mono text-sm text-white">OPENAI_MODEL</td>
+                                <td class="p-4"><span class="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">否</span></td>
+                                <td class="p-4 text-neutral-600">使用的模型名称</td>
+                                <td class="p-4 font-mono text-xs text-neutral-500">doubao-seed-2-0-pro-260215</td>
+                            </tr>
+                            <tr>
+                                <td class="p-4 font-mono text-sm text-white">IMAGE_API_KEY</td>
+                                <td class="p-4"><span class="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">否</span></td>
+                                <td class="p-4 text-neutral-600">图片生成 API 密钥</td>
+                                <td class="p-4 text-neutral-400">-</td>
+                            </tr>
+                            <tr>
+                                <td class="p-4 font-mono text-sm text-white">ACCESS_CODE</td>
+                                <td class="p-4"><span class="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">否</span></td>
+                                <td class="p-4 text-neutral-600">访问口令</td>
+                                <td class="p-4 text-neutral-400">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- API Endpoints Section -->
+    <section class="py-20 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl sm:text-4xl font-bold text-neutral-900 mb-4">API 端点</h2>
+                <p class="text-lg text-neutral-600 max-w-2xl mx-auto">
+                    RESTful API 设计，易于集成与扩展
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="glass-dark rounded-xl p-6 card-hover">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="gradient-icon w-8 h-8 rounded-lg flex items-center justify-center">
+                            <span class="text-white text-sm font-bold">GET</span>
+                        </div>
+                        <code class="text-sm font-mono text-white">/</code>
+                    </div>
+                    <p class="text-neutral-600">前端页面入口</p>
+                </div>
+                <div class="glass-dark rounded-xl p-6 card-hover">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="gradient-icon w-8 h-8 rounded-lg flex items-center justify-center">
+                            <span class="text-white text-sm font-bold">GET</span>
+                        </div>
+                        <code class="text-sm font-mono text-white">/api/health</code>
+                    </div>
+                    <p class="text-neutral-600">健康检查端点</p>
+                </div>
+                <div class="glass-dark rounded-xl p-6 card-hover">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="gradient-icon w-8 h-8 rounded-lg flex items-center justify-center">
+                            <span class="text-white text-sm font-bold">POST</span>
+                        </div>
+                        <code class="text-sm font-mono text-white">/api/chat</code>
+                    </div>
+                    <p class="text-neutral-600">聊天接口</p>
+                </div>
+                <div class="glass-dark rounded-xl p-6 card-hover">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="gradient-icon w-8 h-8 rounded-lg flex items-center justify-center">
+                            <span class="text-white text-sm font-bold">POST</span>
+                        </div>
+                        <code class="text-sm font-mono text-white">/api/advance-stage</code>
+                    </div>
+                    <p class="text-neutral-600">推进访谈阶段</p>
+                </div>
+                <div class="glass-dark rounded-xl p-6 card-hover">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="gradient-icon w-8 h-8 rounded-lg flex items-center justify-center">
+                            <span class="text-white text-sm font-bold">POST</span>
+                        </div>
+                        <code class="text-sm font-mono text-white">/api/verify-code</code>
+                    </div>
+                    <p class="text-neutral-600">验证访问口令</p>
+                </div>
+                <div class="glass-dark rounded-xl p-6 card-hover">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="gradient-icon w-8 h-8 rounded-lg flex items-center justify-center">
+                            <span class="text-white text-sm font-bold">GET</span>
+                        </div>
+                        <code class="text-sm font-mono text-white">/docs</code>
+                    </div>
+                    <p class="text-neutral-600">API 文档（Swagger UI）</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="py-20 px-4 sm:px-6 lg:px-8 bg-white/50">
+        <div class="max-w-3xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl sm:text-4xl font-bold text-neutral-900 mb-4">常见问题</h2>
+                <p class="text-lg text-neutral-600">
+                    关于部署、配置和使用的常见疑问解答
+                </p>
+            </div>
+
+            <div class="space-y-4">
+                <details class="glass-dark rounded-xl group">
+                    <summary class="p-6 cursor-pointer font-semibold text-neutral-900 flex items-center justify-between">
+                        需要什么技术栈来部署这个应用？
+                        <svg class="w-5 h-5 text-brand-500 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </summary>
+                    <div class="px-6 pb-6 text-neutral-600">
+                        Docker 部署需要 Docker 和 Docker Compose。源码部署需要 Python 3.12+ 和 uv 包管理器。推荐使用 Docker 部署，更简单且环境隔离。
+                    </div>
+                </details>
+
+                <details class="glass-dark rounded-xl group">
+                    <summary class="p-6 cursor-pointer font-semibold text-neutral-900 flex items-center justify-between">
+                        如何配置不同的 LLM 提供商？
+                        <svg class="w-5 h-5 text-brand-500 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </summary>
+                    <div class="px-6 pb-6 text-neutral-600">
+                        在 .env 文件中设置 OPENAI_BASE_URL 为对应的 API 地址，OPENAI_API_KEY 为你的密钥。支持所有 OpenAI 兼容的提供商，如 Azure OpenAI、Anthropic Claude 等。
+                    </div>
+                </details>
+
+                <details class="glass-dark rounded-xl group">
+                    <summary class="p-6 cursor-pointer font-semibold text-neutral-900 flex items-center justify-between">
+                        访谈记录存储在哪里？
+                        <svg class="w-5 h-5 text-brand-500 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </summary>
+                    <div class="px-6 pb-6 text-neutral-600">
+                        所有访谈记录自动保存到 output 目录，以 JSON 格式存储。每个访谈会话生成独立的文件，便于备份和分析。
+                    </div>
+                </details>
+
+                <details class="glass-dark rounded-xl group">
+                    <summary class="p-6 cursor-pointer font-semibold text-neutral-900 flex items-center justify-between">
+                        如何启用图片生成功能？
+                        <svg class="w-5 h-5 text-brand-500 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </summary>
+                    <div class="px-6 pb-6 text-neutral-600">
+                        在 .env 文件中配置 IMAGE_API_KEY、IMAGE_API_BASE_URL 和 IMAGE_API_MODEL。支持 DALL·E、Imagen、Gemini 等多种图片生成服务。
+                    </div>
+                </details>
+
+                <details class="glass-dark rounded-xl group">
+                    <summary class="p-6 cursor-pointer font-semibold text-neutral-900 flex items-center justify-between">
+                        访问口令是必须的吗？
+                        <svg class="w-5 h-5 text-brand-500 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </summary>
+                    <div class="px-6 pb-6 text-neutral-600">
+                        不是必须的。如果将 ACCESS_CODE 留空，则不会启用访问验证。但对于公网部署，强烈建议设置访问口令以保护应用安全。
+                    </div>
+                </details>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section id="get-started" class="py-20 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-4xl mx-auto text-center">
+            <div class="glass-dark rounded-3xl p-8 sm:p-12">
+                <h2 class="text-3xl sm:text-4xl font-bold text-neutral-900 mb-4">开始构建你的 AI 访谈应用</h2>
+                <p class="text-lg text-neutral-600 mb-8 max-w-2xl mx-auto">
+                    简单配置即可启动，支持多阶段对话、图片生成与安全访问控制
+                </p>
+                <div class="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4">
+                    <a href="#" class="w-full sm:w-auto gradient-icon text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity shadow-lg">
+                        克隆项目
+                    </a>
+                    <a href="#" class="w-full sm:w-auto glass-dark text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/90 transition-colors">
+                        查看文档
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 px-4 sm:px-6 lg:px-8 bg-neutral-900">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-center space-y-6 md:space-y-0">
+                <div class="flex items-center space-x-3">
+                    <img src="icon.png" alt="AI 访谈原型" class="w-8 h-8 rounded-lg">
+                    <span class="text-lg font-semibold text-white">AI 访谈原型</span>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <a href="https://github.com" target="_blank" class="text-neutral-400 hover:text-white transition-colors">
+                        GitHub
+                    </a>
+                    <a href="#" class="text-neutral-400 hover:text-white transition-colors">
+                        文档
+                    </a>
+                    <a href="#" class="text-neutral-400 hover:text-white transition-colors">
+                        支持
+                    </a>
+                </div>
+                <div class="text-neutral-500 text-sm">
+                    MIT License © 2026
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Mobile menu toggle (if needed in future)
+        const mobileMenuBtn = document.querySelector('[data-mobile-menu-btn]');
+        if (mobileMenuBtn) {
+            mobileMenuBtn.addEventListener('click', () => {
+                // Toggle mobile menu
+            });
+        }
+    </script>
+</body>
+</html>
